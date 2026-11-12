@@ -23,6 +23,9 @@ info() { printf '\033[36m→\033[0m %s\n' "$*"; }
 warn() { printf '\033[33m!\033[0m %s\n' "$*"; }
 fail() { printf '\033[31m✗\033[0m %s\n' "$*"; exit 1; }
 
+# Alles steht in main(), damit Bash das ganze Skript einliest, bevor das git pull die Datei ersetzt.
+main() {
+
 # Auf HP-Winkel braucht Docker sudo (der Benutzer ist nicht in der Gruppe docker)
 if docker info >/dev/null 2>&1; then
   DOCKER="docker"
@@ -129,17 +132,18 @@ else
   warn "Vom Heimnetz aus kann das am NAT Loopback des Routers liegen: dann am Handy über Mobilfunk testen."
 fi
 
-# 9. Pull Job: nur prüfen und den fehlenden Eintrag anzeigen. Das Skript wird bewusst nicht automatisch geändert.
+# 9. Pull Job: nur prüfen und die fehlende Zeile anzeigen. Das Skript wird bewusst nicht automatisch geändert.
 if [ -f "$DEPLOY_SCRIPT" ]; then
-  if grep -q "ai-site" "$DEPLOY_SCRIPT"; then
+  if grep -q "deploy ai-site" "$DEPLOY_SCRIPT"; then
     ok "Pull Job kennt ai-site schon"
   else
-    warn "Pull Job kennt ai-site noch nicht. In $DEPLOY_SCRIPT zur Liste der Repositories ergänzen,"
-    warn "im gleichen Format wie die vorhandenen Einträge. Vorhandene Einträge:"
-    grep -n 'docker/' "$DEPLOY_SCRIPT" | grep ';' | sed 's/^/    /' || true
-    warn "Neuer Eintrag, Branch release, Neubau nur bei Änderung an nginx/ oder docker-compose.yml:"
-    printf '    "ai-site;%s;release;^(nginx/|docker-compose\\.yml$)"\n' "$REPO_DIR"
+    warn "Pull Job kennt ai-site noch nicht. Diese Zeile am Ende von $DEPLOY_SCRIPT ergänzen:"
+    printf '    %s\n' "deploy ai-site '^(nginx/|docker-compose\.yml)' '--force-recreate'"
   fi
 else
   warn "$DEPLOY_SCRIPT nicht gefunden. Pfad mit DEPLOY_SCRIPT=... angeben."
 fi
+}
+
+main "$@"
+exit $?

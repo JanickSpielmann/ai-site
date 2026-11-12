@@ -36,7 +36,11 @@ Vorher mit `git log origin/release..main` ansehen, was alles live ginge.
         cd ~/docker/ai-site && ./setup-winkel.sh
 
    Das Skript startet den Container, ergänzt den Block in `~/docker/caddy/Caddyfile` (mit Sicherung, bei einem Fehler wird sie zurückgespielt), lädt Caddy neu und testet die Seite.
-3. **Pull Job:** Das Skript zeigt am Ende, welche Zeile in `~/docker/winkel-deploy/winkel-deploy.sh` fehlt. Von Hand ergänzen.
+3. **Pull Job:** Das Skript zeigt am Ende, wenn in `~/docker/winkel-deploy/winkel-deploy.sh` die Zeile fehlt. Sie lautet:
+
+        deploy ai-site '^(nginx/|docker-compose\.yml)' '--force-recreate'
+
+   Neu gebaut wird nur, wenn sich `nginx/` oder `docker-compose.yml` ändern. Änderungen an `site/` brauchen keinen Neustart.
 4. Test von aussen mit mobilen Daten.
 
 Das Repository ist öffentlich, der Klon braucht deshalb keinen Deploy Key.
