@@ -1,0 +1,512 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>WebGPU Heavyweight Local LLM</title>
+  <style>
+    :root {
+      --bg: #0f1115;
+      --panel: #181b22;
+      --border: #2a2f3a;
+      --accent: #3b82f6;
+      --danger: #dc2626;
+      --text: #e5e7eb;
+      --muted: #9ca3af;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: system-ui, -apple-system, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      display: flex;
+      flex-direction: column;
+      height: 100vh;
+      max-width: 960px;
+      margin-inline: auto;
+      padding: 1rem;
+    }
+    header {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.75rem;
+      align-items: center;
+      justify-content: space-between;
+      background: var(--panel);
+      padding: 0.85rem 1rem;
+      border-radius: 8px;
+      border: 1px solid var(--border);
+      margin-bottom: 0.75rem;
+    }
+    .header-controls {
+      display: flex;
+      gap: 0.5rem;
+      align-items: center;
+      flex-wrap: wrap;
+    }
+    select, button, input {
+      background: #222631;
+      color: var(--text);
+      border: 1px solid var(--border);
+      padding: 0.5rem 0.75rem;
+      border-radius: 6px;
+      font-size: 0.86rem;
+    }
+    select { max-width: 440px; }
+    button {
+      background: var(--accent);
+      border-color: var(--accent);
+      color: #fff;
+      font-weight: 600;
+      cursor: pointer;
+    }
+    button:disabled {
+      background: #2a2f3a !important;
+      border-color: #2a2f3a !important;
+      color: var(--muted) !important;
+      cursor: not-allowed;
+    }
+    button.secondary {
+      background: #262b36;
+      border-color: var(--border);
+    }
+    button.danger {
+      background: var(--danger);
+      border-color: var(--danger);
+    }
+    #status-bar {
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 0.75rem 1rem;
+      margin-bottom: 0.75rem;
+      font-size: 0.85rem;
+      color: var(--muted);
+    }
+    .status-top {
+      display: flex;
+      justify-content: space-between;
+      gap: 1rem;
+      align-items: center;
+    }
+    #timer-badge {
+      font-variant-numeric: tabular-nums;
+      color: #93c5fd;
+      font-weight: 600;
+      white-space: nowrap;
+    }
+    .progress-wrap {
+      width: 100%;
+      height: 8px;
+      background: #222631;
+      border-radius: 4px;
+      margin-top: 0.5rem;
+      overflow: hidden;
+    }
+    #progress-bar {
+      height: 100%;
+      width: 0%;
+      background: var(--accent);
+      transition: width 0.15s ease;
+    }
+    #chat-box {
+      flex: 1;
+      overflow-y: auto;
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 1rem;
+      display: flex;
+      flex-direction: column;
+      gap: 1rem;
+      margin-bottom: 0.75rem;
+    }
+    .msg {
+      padding: 0.75rem 1rem;
+      border-radius: 8px;
+      line-height: 1.5;
+      max-width: 88%;
+      white-space: pre-wrap;
+      word-break: break-word;
+    }
+    .msg.user {
+      align-self: flex-end;
+      background: #1e3a8a;
+      border: 1px solid #2563eb;
+    }
+    .msg.assistant {
+      align-self: flex-start;
+      background: #222631;
+      border: 1px solid var(--border);
+      width: 100%;
+    }
+    details.think-box {
+      background: #161920;
+      border: 1px solid #2e3442;
+      border-radius: 6px;
+      padding: 0.5rem 0.75rem;
+      margin-bottom: 0.6rem;
+      font-size: 0.85rem;
+      color: var(--muted);
+    }
+    details.think-box summary {
+      cursor: pointer;
+      font-weight: 600;
+      color: #93c5fd;
+      user-select: none;
+    }
+    .stats {
+      margin-top: 0.5rem;
+      font-size: 0.75rem;
+      color: var(--muted);
+      border-top: 1px solid var(--border);
+      padding-top: 0.35rem;
+    }
+    .input-row {
+      display: flex;
+      gap: 0.5rem;
+    }
+    #user-input {
+      flex: 1;
+      padding: 0.75rem;
+      font-size: 0.95rem;
+    }
+    label.toggle {
+      display: flex;
+      align-items: center;
+      gap: 0.35rem;
+      font-size: 0.85rem;
+      color: var(--muted);
+      cursor: pointer;
+    }
+  </style>
+</head>
+<body>
+
+  <header>
+    <strong>WebGPU Heavyweight LLM</strong>
+    <div class="header-controls">
+      <select id="model-select">
+        <option>Loading official model registry...</option>
+      </select>
+      <label class="toggle" title="Enable/disable chain-of-thought reasoning on Qwen3 models">
+        <input type="checkbox" id="think-toggle" checked> Reasoning (/think)
+      </label>
+      <button id="load-btn" disabled>Load Model</button>
+      <button id="unload-btn" class="danger" disabled title="Free RAM and VRAM immediately">Unload RAM</button>
+      <button id="clear-btn" class="secondary" disabled>Clear Chat</button>
+    </div>
+  </header>
+
+  <div id="status-bar">
+    <div class="status-top">
+      <div id="status-text">Loading WebLLM library from CDN...</div>
+      <div id="timer-badge"></div>
+    </div>
+    <div class="progress-wrap"><div id="progress-bar"></div></div>
+  </div>
+
+  <div id="chat-box"></div>
+
+  <div class="input-row">
+    <input type="text" id="user-input" placeholder="Load a model first..." disabled />
+    <button id="send-btn" disabled>Send</button>
+    <button id="stop-btn" class="secondary" disabled>Stop</button>
+  </div>
+
+  <script type="module">
+    import { MLCEngine, prebuiltAppConfig } from "https://esm.run/@mlc-ai/web-llm";
+
+    const statusText = document.getElementById("status-text");
+    const timerBadge = document.getElementById("timer-badge");
+    const progressBar = document.getElementById("progress-bar");
+    const modelSelect = document.getElementById("model-select");
+    const loadBtn = document.getElementById("load-btn");
+    const unloadBtn = document.getElementById("unload-btn");
+    const clearBtn = document.getElementById("clear-btn");
+    const thinkToggle = document.getElementById("think-toggle");
+    const chatBox = document.getElementById("chat-box");
+    const userInput = document.getElementById("user-input");
+    const sendBtn = document.getElementById("send-btn");
+    const stopBtn = document.getElementById("stop-btn");
+
+    function showError(msg) {
+      statusText.style.color = "#f87171";
+      statusText.textContent = msg;
+    }
+
+    function getLoadEstimates(vramMB) {
+      const downloadGB = Math.max(0.8, (vramMB / 1024) * 0.78);
+      const firstDownloadSec = Math.round((downloadGB * 1024) / 45);
+      const cachedLoadSec = Math.max(2, Math.round(downloadGB / 1.1));
+      const dlFormatted = firstDownloadSec >= 60
+        ? `~${Math.round(firstDownloadSec / 60)}m ${firstDownloadSec % 60}s`
+        : `~${firstDownloadSec}s`;
+      return {
+        downloadGB: downloadGB.toFixed(1),
+        dlFormatted,
+        cachedFormatted: `~${cachedLoadSec}s`
+      };
+    }
+
+    try {
+      if (!navigator.gpu) {
+        throw new Error("WebGPU is not supported or enabled in this browser.");
+      }
+
+      const useIndexedDB = window.location.protocol === "file:";
+
+      const models = prebuiltAppConfig.model_list
+        .filter(m => m.model_id.includes("q4f16_1") && (m.vram_required_MB || 0) >= 1500)
+        .sort((a, b) => (b.vram_required_MB || 0) - (a.vram_required_MB || 0));
+
+      const modelMeta = new Map();
+      modelSelect.innerHTML = "";
+
+      for (const m of models) {
+        const vramMB = m.vram_required_MB || 3000;
+        const vramGB = (vramMB / 1024).toFixed(1);
+        const est = getLoadEstimates(vramMB);
+        modelMeta.set(m.model_id, { vramGB, ...est });
+
+        const opt = document.createElement("option");
+        opt.value = m.model_id;
+        opt.textContent = `${m.model_id} (${vramGB}GB VRAM | 1st DL: ${est.dlFormatted} • Cached: ${est.cachedFormatted})`;
+        if (m.model_id.startsWith("Qwen3-8B-q4f16_1")) {
+          opt.selected = true;
+        }
+        modelSelect.appendChild(opt);
+      }
+
+      function previewSelectedModelEstimate() {
+        const meta = modelMeta.get(modelSelect.value);
+        if (!meta) return;
+        statusText.style.color = "#9ca3af";
+        statusText.textContent = `Selected: ${modelSelect.value} (~${meta.downloadGB} GB download). Est. Load Time — First download: ${meta.dlFormatted} | Cached on SSD: ${meta.cachedFormatted}.`;
+      }
+
+      modelSelect.addEventListener("change", previewSelectedModelEstimate);
+      previewSelectedModelEstimate();
+      loadBtn.disabled = false;
+
+      let loadStartTime = 0;
+
+      const engine = new MLCEngine({
+        appConfig: {
+          ...prebuiltAppConfig,
+          useIndexedDBCache: useIndexedDB
+        },
+        initProgressCallback: (report) => {
+          const pct = report.progress !== undefined ? Math.round(report.progress * 100) : 0;
+          const elapsedSec = (performance.now() - loadStartTime) / 1000;
+
+          let etaText = "";
+          if (pct > 3 && pct < 100) {
+            const remainingSec = Math.max(1, Math.round((elapsedSec / (pct / 100)) - elapsedSec));
+            etaText = ` • ETA ~${remainingSec}s`;
+          }
+
+          statusText.style.color = "#e5e7eb";
+          statusText.textContent = `[${pct}%] ${report.text}`;
+          timerBadge.textContent = `${elapsedSec.toFixed(1)}s elapsed${etaText}`;
+          progressBar.style.width = `${Math.max(3, pct)}%`;
+        }
+      });
+
+      let isModelLoaded = false;
+
+      // Clean, neutral system prompt so the model never repeats canned disclaimers
+      const getBaseMessages = () => [
+        {
+          role: "system",
+          content: "You are a helpful, direct AI assistant. Answer questions concisely and naturally without disclaimers or meta-commentary."
+        }
+      ];
+      let messages = getBaseMessages();
+
+      async function unloadCurrentModel() {
+        if (isModelLoaded) {
+          statusText.style.color = "#fbbf24";
+          statusText.textContent = "Unloading previous model from RAM & VRAM...";
+          timerBadge.textContent = "";
+          progressBar.style.width = "0%";
+          await engine.unload();
+          isModelLoaded = false;
+          unloadBtn.disabled = true;
+          userInput.disabled = true;
+          sendBtn.disabled = true;
+          await new Promise(r => setTimeout(r, 300));
+        }
+      }
+
+      loadBtn.addEventListener("click", async () => {
+        const selectedModel = modelSelect.value;
+        const meta = modelMeta.get(selectedModel);
+        loadBtn.disabled = true;
+        unloadBtn.disabled = true;
+        modelSelect.disabled = true;
+        userInput.disabled = true;
+        sendBtn.disabled = true;
+
+        try {
+          await unloadCurrentModel();
+
+          loadStartTime = performance.now();
+          statusText.style.color = "#60a5fa";
+          statusText.textContent = `Loading ${selectedModel} (Est: ${meta.dlFormatted} first time / ${meta.cachedFormatted} cached)...`;
+          timerBadge.textContent = "0.0s elapsed";
+          progressBar.style.width = "3%";
+
+          await engine.reload(selectedModel, {
+            context_window_size: 4096
+          });
+
+          const totalLoadSec = ((performance.now() - loadStartTime) / 1000).toFixed(1);
+          isModelLoaded = true;
+          messages = getBaseMessages();
+          statusText.style.color = "#4ade80";
+          statusText.textContent = `Ready — ${selectedModel} loaded in ${totalLoadSec}s (4096 context cap).`;
+          timerBadge.textContent = `Loaded in ${totalLoadSec}s`;
+          progressBar.style.width = "100%";
+          userInput.disabled = false;
+          sendBtn.disabled = false;
+          unloadBtn.disabled = false;
+          clearBtn.disabled = false;
+          userInput.placeholder = "Ask anything...";
+          userInput.focus();
+        } catch (err) {
+          showError(`Load failed: ${err.message}`);
+          console.error(err);
+        } finally {
+          loadBtn.disabled = false;
+          modelSelect.disabled = false;
+        }
+      });
+
+      unloadBtn.addEventListener("click", async () => {
+        await unloadCurrentModel();
+        statusText.style.color = "#9ca3af";
+        statusText.textContent = "Model unloaded — RAM and VRAM freed.";
+      });
+
+      window.addEventListener("pagehide", () => {
+        if (isModelLoaded) engine.unload();
+      });
+
+      function renderAssistantReply(container, rawText, statsText = "") {
+        container.innerHTML = "";
+        const thinkMatch = rawText.match(/^<think>([\s\S]*?)(?:<\/think>|$)([\s\S]*)/);
+
+        if (thinkMatch) {
+          const thinkContent = thinkMatch[1].trim();
+          const finalAnswer = thinkMatch[2].trim();
+          const isStillThinking = !rawText.includes("</think>");
+
+          if (thinkContent) {
+            const details = document.createElement("details");
+            details.className = "think-box";
+            if (isStillThinking) details.open = true;
+
+            const summary = document.createElement("summary");
+            summary.textContent = isStillThinking ? "Thinking..." : "Thought Process";
+            details.appendChild(summary);
+
+            const pre = document.createElement("div");
+            pre.textContent = thinkContent;
+            pre.style.marginTop = "0.4rem";
+            details.appendChild(pre);
+            container.appendChild(details);
+          }
+
+          const answerDiv = document.createElement("div");
+          answerDiv.textContent = finalAnswer;
+          container.appendChild(answerDiv);
+        } else {
+          const answerDiv = document.createElement("div");
+          answerDiv.textContent = rawText;
+          container.appendChild(answerDiv);
+        }
+
+        if (statsText) {
+          const statsDiv = document.createElement("div");
+          statsDiv.className = "stats";
+          statsDiv.textContent = statsText;
+          container.appendChild(statsDiv);
+        }
+      }
+
+      async function sendMessage() {
+        const text = userInput.value.trim();
+        if (!text || !isModelLoaded) return;
+
+        userInput.value = "";
+        userInput.disabled = true;
+        sendBtn.disabled = true;
+        stopBtn.disabled = false;
+
+        const isQwen3 = modelSelect.value.startsWith("Qwen3-");
+        const promptSuffix = isQwen3 ? (thinkToggle.checked ? " /think" : " /no_think") : "";
+        messages.push({ role: "user", content: text + promptSuffix });
+
+        const userDiv = document.createElement("div");
+        userDiv.className = "msg user";
+        userDiv.textContent = text;
+        chatBox.appendChild(userDiv);
+
+        const botDiv = document.createElement("div");
+        botDiv.className = "msg assistant";
+        botDiv.textContent = "...";
+        chatBox.appendChild(botDiv);
+        chatBox.scrollTop = chatBox.scrollHeight;
+
+        let reply = "";
+        const startTime = performance.now();
+
+        try {
+          const chunks = await engine.chat.completions.create({
+            messages,
+            temperature: 0.4,
+            stream: true,
+            stream_options: { include_usage: true }
+          });
+
+          for await (const chunk of chunks) {
+            const delta = chunk.choices[0]?.delta?.content || "";
+            reply += delta;
+            renderAssistantReply(botDiv, reply);
+            chatBox.scrollTop = chatBox.scrollHeight;
+
+            if (chunk.usage) {
+              const elapsedSec = (performance.now() - startTime) / 1000;
+              const tokPerSec = (chunk.usage.completion_tokens / elapsedSec).toFixed(1);
+              renderAssistantReply(botDiv, reply, `${chunk.usage.completion_tokens} tokens • ${tokPerSec} tok/s`);
+            }
+          }
+          messages.push({ role: "assistant", content: reply });
+        } catch (err) {
+          botDiv.textContent = `Generation error: ${err.message}`;
+        } finally {
+          userInput.disabled = false;
+          sendBtn.disabled = false;
+          stopBtn.disabled = true;
+          userInput.focus();
+        }
+      }
+
+      sendBtn.addEventListener("click", sendMessage);
+      userInput.addEventListener("keydown", (e) => { if (e.key === "Enter") sendMessage(); });
+      stopBtn.addEventListener("click", async () => { if (isModelLoaded) await engine.interruptGenerate(); });
+      clearBtn.addEventListener("click", async () => {
+        messages = getBaseMessages();
+        chatBox.innerHTML = "";
+        if (isModelLoaded) await engine.resetChat();
+      });
+
+    } catch (err) {
+      showError(`Initialization Error: ${err.message}`);
+      console.error(err);
+    }
+  </script>
+</body>
+</html>
