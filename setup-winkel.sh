@@ -50,7 +50,7 @@ ok "Container läuft"
 
 # 3. Lokaler Test, noch ohne Caddy
 sleep 2
-if $DOCKER exec "$SITE_CONTAINER" wget -q -O /dev/null http://localhost/ 2>/dev/null; then
+if $DOCKER exec "$SITE_CONTAINER" wget -q -O /dev/null http://127.0.0.1/ 2>/dev/null; then
   ok "nginx im Container antwortet"
 else
   fail "nginx im Container antwortet nicht. Log: $DOCKER logs $SITE_CONTAINER"
